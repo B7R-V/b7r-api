@@ -36,6 +36,8 @@ export default async function handler(req, res) {
     try {
         const info = await runYtdlp(url, {
             timeout: 50000,
+            cookiesEnv: 'YOUTUBE_COOKIES',
+            extractorArgs: 'youtube:player_client=android,ios,web',
             extraArgs: ['-f', formatArg]
         })
         const data = extractInfo(info)
