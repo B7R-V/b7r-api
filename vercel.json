@@ -9,13 +9,4 @@
   "rewrites": [
     { "source": "/", "destination": "/api/index" }
   ]
-}  { "source": "/", "destination": "/api/index"     "includeFiles": "{bin,lib,scripts,cookies.txt,cookies_ig.txt}/**"
-    },
-    "api/*.py": {
-      "maxDuration": 60
-    }
-  },
-  "rewrites": [
-    { "source": "/", "destination": "/api/index" }
-  ]
 }
