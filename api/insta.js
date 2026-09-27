@@ -25,7 +25,10 @@ export default async function handler(req, res) {
     }
 
     try {
-        const info = await runYtdlp(url, { timeout: 45000 })
+        const info = await runYtdlp(url, {
+            timeout: 45000,
+            useCookies: true
+        })
         const data = extractInfo(info)
 
         if (!data.video) {
