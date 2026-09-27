@@ -4,6 +4,9 @@
     "api/*.js": {
       "maxDuration": 60,
       "includeFiles": "{bin,lib,scripts,cookies.txt,cookies_ig.txt}/**"
+    },
+    "api/*.py": {
+      "maxDuration": 60
     }
   },
   "rewrites": [
