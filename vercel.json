@@ -4,6 +4,12 @@
     "api/*.js": {
       "maxDuration": 60,
       "includeFiles": "{bin,lib,scripts,cookies.txt,cookies_ig.txt}/**"
+    }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/api/index" }
+  ]
+}  { "source": "/", "destination": "/api/index"     "includeFiles": "{bin,lib,scripts,cookies.txt,cookies_ig.txt}/**"
     },
     "api/*.py": {
       "maxDuration": 60
