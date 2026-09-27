@@ -1,8 +1,6 @@
-import axios from 'axios'
+import { snapsave } from 'snapsave-media-downloader'
 
-export const config = {
-    maxDuration: 60
-}
+export const config = { maxDuration: 60 }
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -10,83 +8,33 @@ export default async function handler(req, res) {
 
     const url = req.query?.url || req.body?.url
 
-    if (!url || typeof url !== 'string') {
-        return res.status(400).json({
-            success: false,
-            error: 'Missing or invalid url parameter'
-        })
+    if (!url || typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+        return res.status(400).json({ success: false, error: 'Invalid or missing URL parameter' })
     }
 
-    if (!/^https?:\/\//i.test(url)) {
-        return res.status(400).json({
-            success: false,
-            error: 'Invalid URL format'
-        })
-    }
+    try {
+        const result = await snapsave(url)
 
-    const apis = [
-        `https://api.nexoracle.com/downloader/instagram?apikey=free&url=${encodeURIComponent(url)}`,
-        `https://api.betabotz.eu.org/api/download/igdowloader?url=${encodeURIComponent(url)}&apikey=beta`,
-        `https://api.yanzbotz.my.id/api/downloader/instagram?url=${encodeURIComponent(url)}`
-    ]
-
-    for (const apiUrl of apis) {
-        try {
-            const { data } = await axios.get(apiUrl, {
-                timeout: 25000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-            })
-
-            const videoUrl =
-                data?.result?.video ||
-                data?.result?.url ||
-                data?.result?.download_url ||
-                data?.data?.video ||
-                data?.video ||
-                data?.url ||
-                data?.result?.[0]?.url ||
-                data?.result?.medias?.[0]?.url ||
-                null
-
-            const thumbnail =
-                data?.result?.thumbnail ||
-                data?.data?.thumbnail ||
-                data?.thumbnail ||
-                ''
-
-            const title =
-                data?.result?.caption ||
-                data?.result?.title ||
-                data?.data?.title ||
-                data?.title ||
-                'Instagram Video'
-
-            const uploader =
-                data?.result?.username ||
-                data?.result?.owner ||
-                data?.data?.username ||
-                ''
-
-            if (videoUrl && typeof videoUrl === 'string' && videoUrl.startsWith('http')) {
-                return res.status(200).json({
-                    success: true,
-                    platform: 'instagram',
-                    title: String(title).slice(0, 200),
-                    thumbnail,
-                    video: videoUrl,
-                    audio: videoUrl,
-                    uploader
-                })
-            }
-        } catch (e) {
-            continue
+        if (!result || !result.success || !result.data || !result.data.media || result.data.media.length === 0) {
+            return res.status(404).json({ success: false, error: 'No downloadable media found or API failed.' })
         }
-    }
 
-    return res.status(404).json({
-        success: false,
-        error: 'All APIs failed. Try another Instagram URL.'
-    })
+        const media = result.data.media[0]
+        if (media.type !== 'video') {
+            return res.status(404).json({ success: false, error: 'The provided URL does not contain a video.' })
+        }
+
+        return res.status(200).json({
+            success: true,
+            platform: 'instagram',
+            title: result.data.description || 'Instagram Video',
+            thumbnail: media.thumbnail || '',
+            video: media.url,
+            audio: media.url,
+            uploader: result.data.author || '' 
+        })
+
+    } catch (e) {
+        return res.status(500).json({ success: false, error: e.message || 'An unknown error occurred.' })
+    }
 }
