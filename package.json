@@ -4,6 +4,7 @@
   "type": "module",
   "description": "Media downloader API",
   "scripts": {
+    "postinstall": "node scripts/setup.js",
     "start": "node index.js"
   },
   "dependencies": {
