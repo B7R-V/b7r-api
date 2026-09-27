@@ -1,6 +1,8 @@
-import { snapsave } from 'snapsave-media-downloader'
+import { runYtdlp, extractInfo } from '../lib/ytdlp.js'
 
-export const config = { maxDuration: 60 }
+export const config = {
+    maxDuration: 60
+}
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -8,33 +10,43 @@ export default async function handler(req, res) {
 
     const url = req.query?.url || req.body?.url
 
-    if (!url || typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
-        return res.status(400).json({ success: false, error: 'Invalid or missing URL parameter' })
+    if (!url || typeof url !== 'string') {
+        return res.status(400).json({
+            success: false,
+            error: 'Missing or invalid url parameter'
+        })
+    }
+
+    if (!/^https?:\/\//i.test(url)) {
+        return res.status(400).json({
+            success: false,
+            error: 'Invalid URL format'
+        })
     }
 
     try {
-        const result = await snapsave(url)
+        const info = await runYtdlp(url, {
+            timeout: 45000,
+            useCookies: true
+        })
+        const data = extractInfo(info)
 
-        if (!result || !result.success || !result.data || !result.data.media || result.data.media.length === 0) {
-            return res.status(404).json({ success: false, error: 'No downloadable media found or API failed.' })
-        }
-
-        const media = result.data.media[0]
-        if (media.type !== 'video') {
-            return res.status(404).json({ success: false, error: 'The provided URL does not contain a video.' })
+        if (!data.video) {
+            return res.status(404).json({
+                success: false,
+                error: 'No downloadable video found'
+            })
         }
 
         return res.status(200).json({
             success: true,
             platform: 'instagram',
-            title: result.data.description || 'Instagram Video',
-            thumbnail: media.thumbnail || '',
-            video: media.url,
-            audio: media.url,
-            uploader: result.data.author || '' 
+            ...data
         })
-
     } catch (e) {
-        return res.status(500).json({ success: false, error: e.message || 'An unknown error occurred.' })
+        return res.status(500).json({
+            success: false,
+            error: e.message || 'Download failed'
+        })
     }
-}
+                }
