@@ -25,12 +25,12 @@ export default async function handler(req, res) {
         })
     }
 
-    let formatArg = 'best[ext=mp4]/best'
+    let formatArg = 'bestvideo*[height<=720]+bestaudio/best[height<=720]/bestvideo+bestaudio/best'
 
     if (quality === 'audio') {
         formatArg = 'bestaudio[ext=m4a]/bestaudio/best'
     } else if (['360', '480', '720', '1080', '1440', '2160'].includes(String(quality))) {
-        formatArg = `best[height<=${quality}][ext=mp4]/best[height<=${quality}]/best`
+        formatArg = `bestvideo*[height<=${quality}]+bestaudio/best[height<=${quality}]/bestvideo+bestaudio/best`
     }
 
     try {
