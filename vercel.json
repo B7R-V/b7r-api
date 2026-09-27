@@ -3,7 +3,7 @@
   "functions": {
     "api/*.js": {
       "maxDuration": 60,
-      "includeFiles": "{bin,lib,scripts,cookies.txt}/**"
+      "includeFiles": "{bin,lib,scripts,cookies.txt,cookies_ig.txt}/**"
     }
   },
   "rewrites": [
