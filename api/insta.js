@@ -1,4 +1,5 @@
-import instagramGetUrl from 'instagram-url-direct'
+import pkg from 'instagram-url-direct'
+const instagramGetUrl = pkg.default || pkg.instagramGetUrl || pkg
 
 export const config = {
     maxDuration: 60
@@ -37,11 +38,11 @@ export default async function handler(req, res) {
         if (!result || !result.url_list || !result.url_list.length) {
             return res.status(404).json({
                 success: false,
-                error: 'No media found in this post'
+                error: 'No media found',
+                debug: JSON.stringify(result).slice(0, 300)
             })
         }
 
-        // أول رابط فيديو
         const videoUrl = result.url_list.find(u => u.includes('.mp4')) || result.url_list[0]
 
         return res.status(200).json({
@@ -56,10 +57,10 @@ export default async function handler(req, res) {
             all: result.url_list
         })
     } catch (e) {
-        console.error('[INSTAGRAM]', e.message)
+        console.error('[INSTAGRAM]', e.stack || e.message)
         return res.status(500).json({
             success: false,
             error: e.message || 'Download failed'
         })
     }
-}
+                                    }
