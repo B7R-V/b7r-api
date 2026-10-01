@@ -1,38 +1,12 @@
 import axios from 'axios'
-import fs from 'fs'
-import path from 'path'
 
 export const config = {
     maxDuration: 60
 }
 
-function findCookiesFile() {
-    const candidates = [
-        path.join(process.cwd(), 'cookies_ig.txt'),
-        '/var/task/cookies_ig.txt',
-        path.join(process.cwd(), '..', 'cookies_ig.txt')
-    ]
-    for (const p of candidates) {
-        try {
-            if (fs.existsSync(p)) return p
-        } catch {}
-    }
-    return null
-}
-
-function parseCookies(content) {
-    // Netscape format → header string
-    const lines = String(content).split('\n')
-    const pairs = []
-    for (const line of lines) {
-        if (!line || line.startsWith('#')) continue
-        const parts = line.split('\t')
-        if (parts.length >= 7) {
-            const [, , , , , name, value] = parts
-            pairs.push(`${name}=${value}`)
-        }
-    }
-    return pairs.join('; ')
+function extractShortcode(url) {
+    const m = url.match(/\/(p|reel|reels|tv)\/([A-Za-z0-9_-]+)/)
+    return m ? m[2] : null
 }
 
 function match(str, ...patterns) {
@@ -43,113 +17,60 @@ function match(str, ...patterns) {
     return null
 }
 
-async function fetchInstagramVideo(url) {
-    const cookieFile = findCookiesFile()
-    let cookieHeader = ''
-
-    if (cookieFile) {
-        try {
-            const content = fs.readFileSync(cookieFile, 'utf8')
-            cookieHeader = parseCookies(content)
-        } catch (e) {
-            console.error('[IG] cookie read error:', e.message)
-        }
-    }
+async function fetchFromEmbed(shortcode) {
+    const embedUrl = `https://www.instagram.com/p/${shortcode}/embed/captioned/`
 
     const headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Cache-Control': 'max-age=0',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Dest': 'iframe',
         'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"Windows"',
+        'Sec-Fetch-Site': 'cross-site',
         'Referer': 'https://www.instagram.com/'
     }
 
-    if (cookieHeader) {
-        headers['Cookie'] = cookieHeader
-    }
-
-    const { data } = await axios.get(url, {
+    const { data } = await axios.get(embedUrl, {
         headers,
-        timeout: 30000,
-        maxRedirects: 10,
+        timeout: 25000,
         validateStatus: (s) => s >= 200 && s < 400
     })
 
     const html = String(data)
 
-    // ═══ المسار 1: video_versions من JSON ═══
-    const videoVersionsMatch = html.match(/"video_versions":\s*(\[[^\]]*\])/)
-
-    if (videoVersionsMatch) {
-        try {
-            const versions = JSON.parse(videoVersionsMatch[1])
-            if (Array.isArray(versions) && versions.length) {
-                const best = versions[0]
-                return {
-                    video: best.url,
-                    thumbnail: best.image?.url || ''
-                }
-            }
-        } catch {}
-    }
-
-    // ═══ المسار 2: og:video ═══
-    const ogVideo = match(
-        html,
-        /property="og:video"\s+content="(.*?)"/,
-        /property="og:video:secure_url"\s+content="(.*?)"/
-    )?.[1]
-
-    // ═══ المسار 3: video_url regex ═══
+    // ابحث عن video_url في الـ JSON
     const videoUrl = match(
         html,
         /"video_url":"(https:[^"]+?)"/,
+        /video_url\\?":\\?"(https:[^"\\]+)/,
         /"contentUrl":"(https:[^"]+?)"/
     )?.[1]
 
-    const finalVideo = ogVideo || videoUrl
-
-    if (!finalVideo) {
-        return null
-    }
-
-    const decoded = finalVideo
-        .replace(/\\u0026/g, '&')
-        .replace(/\\\//g, '/')
-        .replace(/&amp;/g, '&')
-
     const thumb = match(
         html,
-        /property="og:image"\s+content="(.*?)"/,
-        /"display_url":"(https:[^"]+?)"/
+        /"display_url":"(https:[^"]+?)"/,
+        /"thumbnail_url":"(https:[^"]+?)"/,
+        /property="og:image"\s+content="(https:[^"]+?)"/
     )?.[1]
 
-    const title = match(
+    const caption = match(
         html,
-        /property="og:title"\s+content="(.*?)"/,
-        /property="og:description"\s+content="(.*?)"/
-    )?.[1] || 'Instagram Video'
+        /"caption":"(.*?)"/,
+        /class="Caption"[\s\S]*?>([^<]{1,300})</,
+        /property="og:title"\s+content="([^"]+)"/
+    )?.[1]
 
     const author = match(
         html,
-        /property="og:title"\s+content="(.*?)\s+on\s+Instagram/,
-        /"username":"([^"]+?)"/
-    )?.[1] || ''
+        /"username":"([^"]+?)"/,
+        /class="UsernameText">([^<]+)</
+    )?.[1]
 
     return {
-        video: decoded,
-        thumbnail: thumb ? thumb.replace(/&amp;/g, '&') : '',
-        title: title.replace(/&amp;/g, '&').slice(0, 200),
-        uploader: author
+        video: videoUrl ? videoUrl.replace(/\\u0026/g, '&').replace(/\\\//g, '/') : null,
+        thumbnail: thumb ? thumb.replace(/\\u0026/g, '&').replace(/\\\//g, '/') : '',
+        title: caption ? caption.replace(/\\u0026/g, '&').replace(/\\u002F/g, '/').slice(0, 200) : 'Instagram Video',
+        uploader: author || ''
     }
 }
 
@@ -167,29 +88,30 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, error: 'Invalid URL' })
     }
 
-    if (!/(instagram\.com|instagr\.am)/i.test(url)) {
-        return res.status(400).json({ success: false, error: 'Not an Instagram URL' })
+    const shortcode = extractShortcode(url)
+
+    if (!shortcode) {
+        return res.status(400).json({ success: false, error: 'Invalid Instagram URL' })
     }
 
     try {
-        const data = await fetchInstagramVideo(url)
+        const data = await fetchFromEmbed(shortcode)
 
-        if (!data || !data.video) {
+        if (!data.video) {
             return res.status(404).json({
                 success: false,
-                error: 'No video found. Post may be private or a photo.'
+                error: 'No video found in embed. Try another post.'
             })
         }
 
         return res.status(200).json({
             success: true,
             platform: 'instagram',
-            title: data.title || 'Instagram Video',
-            thumbnail: data.thumbnail || '',
+            title: data.title,
+            thumbnail: data.thumbnail,
             video: data.video,
             audio: data.video,
-            uploader: data.uploader || '',
-            duration: 0
+            uploader: data.uploader
         })
     } catch (e) {
         console.error('[INSTAGRAM]', e.message)
