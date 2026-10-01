@@ -1,65 +1,31 @@
-import { snapsave } from 'snapsave-media-downloader'
+import { InstagramScraper } from '@aduptive/instagram-scraper';
 
-export const config = {
-    maxDuration: 60
-}
+export const config = { maxDuration: 60 };
 
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const url = req.query?.url;
+    if (!url) return res.status(400).json({ success: false, error: 'Missing url' });
 
-    const url = req.query?.url || req.body?.url
-
-    if (!url || typeof url !== 'string') {
-        return res.status(400).json({
-            success: false,
-            error: 'Missing url parameter'
-        })
-    }
-
-    if (!/^https?:\/\//i.test(url)) {
-        return res.status(400).json({
-            success: false,
-            error: 'Invalid URL'
-        })
-    }
-
-    if (!/(instagram\.com|instagr\.am)/i.test(url)) {
-        return res.status(400).json({
-            success: false,
-            error: 'Not an Instagram URL'
-        })
-    }
+    const scraper = new InstagramScraper();
 
     try {
-        const result = await snapsave(url)
-
-        if (!result || !result.success || !result.data || !result.data.media || !result.data.media.length) {
-            return res.status(404).json({
-                success: false,
-                error: result?.message || 'No media found in this post'
-            })
+        const result = await scraper.getPost(url);
+        if (!result.success || !result.post || !result.post.media_items || !result.post.media_items.length) {
+            return res.status(404).json({ success: false, error: result.error || 'No media found' });
         }
-
-        const media = result.data.media
-        const video = media.find(m => m.type === 'video') || media[0]
-
+        const mediaItem = result.post.media_items.find(item => item.type === 'video') || result.post.media_items[0];
         return res.status(200).json({
             success: true,
             platform: 'instagram',
-            title: result.data.description || result.data.title || 'Instagram Video',
-            thumbnail: result.data.preview || video.thumbnail || '',
-            video: video.url,
-            audio: video.url,
-            uploader: '',
-            count: media.length,
-            all: media.map(m => m.url)
-        })
+            title: (result.post.caption || 'Instagram Media').slice(0, 200),
+            thumbnail: result.post.display_url || '',
+            video: mediaItem.url,
+            audio: mediaItem.url,
+            uploader: result.post.owner_username || ''
+        });
     } catch (e) {
-        console.error('[INSTAGRAM]', e.message)
-        return res.status(500).json({
-            success: false,
-            error: e.message || 'Download failed'
-        })
+        console.error('[INSTAGRAM]', e.message);
+        return res.status(500).json({ success: false, error: e.message });
     }
-        }
+            }
