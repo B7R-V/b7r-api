@@ -7,9 +7,10 @@
     "start": "node index.js",
     "postinstall": "node scripts/setup.js"
   },
-  "dependencies": {
-    "axios": "^1.7.9",
-    "snapsave-media-downloader": "^1.0.0"
+"dependencies": {
+  "axios": "^1.7.9",
+  "@aduptive/instagram-scraper": "^2.1.1"
+}
   },
   "engines": {
     "node": "24.x"
