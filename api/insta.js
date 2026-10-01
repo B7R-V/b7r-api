@@ -1,5 +1,4 @@
-import pkg from 'instagram-url-direct'
-const instagramGetUrl = pkg.default || pkg.instagramGetUrl || pkg
+import { snapsave } from 'snapsave-media-downloader'
 
 export const config = {
     maxDuration: 60
@@ -33,34 +32,34 @@ export default async function handler(req, res) {
     }
 
     try {
-        const result = await instagramGetUrl(url)
+        const result = await snapsave(url)
 
-        if (!result || !result.url_list || !result.url_list.length) {
+        if (!result || !result.success || !result.data || !result.data.media || !result.data.media.length) {
             return res.status(404).json({
                 success: false,
-                error: 'No media found',
-                debug: JSON.stringify(result).slice(0, 300)
+                error: result?.message || 'No media found in this post'
             })
         }
 
-        const videoUrl = result.url_list.find(u => u.includes('.mp4')) || result.url_list[0]
+        const media = result.data.media
+        const video = media.find(m => m.type === 'video') || media[0]
 
         return res.status(200).json({
             success: true,
             platform: 'instagram',
-            title: 'Instagram Video',
-            thumbnail: result.poster || '',
-            video: videoUrl,
-            audio: videoUrl,
+            title: result.data.description || result.data.title || 'Instagram Video',
+            thumbnail: result.data.preview || video.thumbnail || '',
+            video: video.url,
+            audio: video.url,
             uploader: '',
-            count: result.url_list.length,
-            all: result.url_list
+            count: media.length,
+            all: media.map(m => m.url)
         })
     } catch (e) {
-        console.error('[INSTAGRAM]', e.stack || e.message)
+        console.error('[INSTAGRAM]', e.message)
         return res.status(500).json({
             success: false,
             error: e.message || 'Download failed'
         })
     }
-                                    }
+        }
