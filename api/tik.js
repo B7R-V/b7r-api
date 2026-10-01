@@ -4,6 +4,24 @@ export const config = {
     maxDuration: 60
 }
 
+function buildUrl(pathOrUrl) {
+    if (!pathOrUrl) return null
+
+    let s = String(pathOrUrl).trim()
+
+    // رابط كامل
+    if (/^https?:\/\//i.test(s)) return s
+
+    // رابط ناقص النقطتين (مشكلة tikwm)
+    if (/^https?\/\//i.test(s)) {
+        return s.replace(/^(https?)(\/\/)/i, '$1://')
+    }
+
+    // مسار نسبي
+    const clean = s.startsWith('/') ? s : '/' + s
+    return `https://www.tikwm.com${clean}`
+}
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -13,19 +31,18 @@ export default async function handler(req, res) {
     if (!url || typeof url !== 'string') {
         return res.status(400).json({
             success: false,
-            error: 'Missing or invalid url parameter'
+            error: 'Missing url parameter'
         })
     }
 
     if (!/^https?:\/\//i.test(url)) {
         return res.status(400).json({
             success: false,
-            error: 'Invalid URL format'
+            error: 'Invalid URL'
         })
     }
 
     try {
-        // استخدام tikwm كوسيط لجلب الفيديو
         const { data } = await axios.get('https://www.tikwm.com/api/', {
             params: { url, hd: 1 },
             timeout: 30000,
@@ -43,22 +60,27 @@ export default async function handler(req, res) {
 
         const video = data.data
 
-        // بناء الروابط من tikwm (تعمل من أي مكان)
-        const videoUrl = video.hdplay
-            ? `https://www.tikwm.com${video.hdplay}`
-            : `https://www.tikwm.com${video.play}`
+        const videoUrl = buildUrl(video.hdplay || video.play)
+        const audioUrl = buildUrl(video.music) || videoUrl
+        const thumbUrl = buildUrl(video.cover)
+
+        if (!videoUrl) {
+            return res.status(404).json({
+                success: false,
+                error: 'Could not build video URL'
+            })
+        }
 
         return res.status(200).json({
             success: true,
             platform: 'tiktok',
             title: (video.title || 'TikTok Video').slice(0, 200),
-            thumbnail: video.cover ? `https://www.tikwm.com${video.cover}` : '',
+            thumbnail: thumbUrl || '',
             duration: video.duration || 0,
             uploader: video.author?.unique_id || '',
             video: videoUrl,
-            audio: video.music ? `https://www.tikwm.com${video.music}` : videoUrl
+            audio: audioUrl
         })
-
     } catch (e) {
         console.error('[TIKTOK]', e.message)
         return res.status(500).json({
@@ -66,4 +88,4 @@ export default async function handler(req, res) {
             error: e.message || 'Download failed'
         })
     }
-}
+            }
