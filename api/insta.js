@@ -1,38 +1,43 @@
-async function parseInstagram(url) {
-    const auth = await fetchAuth()
-    console.log('[SFI] Using auth:', auth)
+import axios from 'axios'
 
-    const params = new URLSearchParams({
-        auth,
-        domain: DOMAIN_VIDEO,
-        origin: 'source',
-        link: url
-    })
+export const config = {
+    maxDuration: 60
+}
 
-    const r = await axios.post(`${API_BASE}/media/parse`, params.toString(), {
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'User-Agent': UA,
-            'Origin': 'https://savefromins.com',
-            'Referer': 'https://savefromins.com/'
-        },
-        timeout: 30000
-    })
+export default async function handler(req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
 
-    console.log('[SFI] Response status:', r.status)
-    console.log('[SFI] Response body:', JSON.stringify(r.data).slice(0, 500))
+    const url = req.query?.url || req.body?.url
 
-    const data = r.data?.data
-    if (!data) {
-        throw new Error(
-            `فشل تحليل الرابط — API رد: ${JSON.stringify(r.data).slice(0, 200)}`
-        )
+    if (!url || typeof url !== 'string') {
+        return res.status(400).json({
+            success: false,
+            error: 'Missing url parameter'
+        })
     }
 
-    return {
-        title: data.title || 'Instagram Media',
-        thumbnail: data.thumbnail || '',
-        duration: data.duration || 0,
-        resources: data.resources || []
+    try {
+        // اختبار: هل الدالة الأساسية شغالة؟
+        const { data } = await axios.get('https://savefromins.com/ar', {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36'
+            },
+            timeout: 15000
+        })
+
+        return res.status(200).json({
+            success: true,
+            test: 'axios works',
+            htmlLength: String(data).length,
+            hasNextScript: String(data).includes('_next')
+        })
+    } catch (e) {
+        return res.status(500).json({
+            success: false,
+            error: e.message,
+            code: e.code,
+            test: 'axios failed'
+        })
     }
 }
