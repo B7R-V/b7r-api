@@ -45,7 +45,7 @@ async function fetchAuth() {
                 if (match) {
                     SFI_SESSION.auth = match[1] || match[0]
                     SFI_SESSION.lastFetch = Date.now()
-                    console.log('[SFI] Auth:', SFI_SESSION.auth)
+                    console.log('[SFI] ✅ Auth fetched:', SFI_SESSION.auth)
                     return SFI_SESSION.auth
                 }
             } catch (e) {}
@@ -54,7 +54,9 @@ async function fetchAuth() {
         console.error('[SFI] fetchAuth failed:', e.message)
     }
 
-    throw new Error('فشل جلب التوكن — savefromins غيّر الـ API')
+    const err = new Error('فشل جلب التوكن — savefromins غيّر الـ API')
+    err.step = 'fetchAuth'
+    throw err
 }
 
 async function parseInstagram(url) {
@@ -76,8 +78,18 @@ async function parseInstagram(url) {
         timeout: 30000
     })
 
+    console.log('[SFI PARSE] Status:', r.status)
+    console.log('[SFI PARSE] Auth:', auth)
+    console.log('[SFI PARSE] Response:', JSON.stringify(r.data).slice(0, 800))
+
     const data = r.data?.data
-    if (!data) throw new Error('فشل تحليل الرابط')
+    if (!data) {
+        const err = new Error(
+            `فشل تحليل الرابط — الرد: ${JSON.stringify(r.data).slice(0, 300)}`
+        )
+        err.step = 'parseInstagram'
+        throw err
+    }
 
     return {
         title: data.title || 'Instagram Media',
@@ -113,7 +125,9 @@ async function getDownloadLink(resource) {
     if (!taskId) {
         const directLink = r.data?.data?.download_link
         if (directLink) return directLink
-        throw new Error('فشل بدء التحميل')
+        const err = new Error('فشل بدء التحميل')
+        err.step = 'getDownloadLink'
+        throw err
     }
 
     const sseUrl = `https://api.savefromins.com/sse/contentsite_api/media/download_query?task_id=${encodeURIComponent(taskId)}&download_domain=${DOMAIN_VIDEO}&origin=content_site`
@@ -125,7 +139,9 @@ async function getDownloadLink(resource) {
         const timeout = setTimeout(() => {
             if (!resolved) {
                 resolved = true
-                reject(new Error('انتهت مدة الانتظار'))
+                const err = new Error('انتهت مدة الانتظار في SSE')
+                err.step = 'SSE'
+                reject(err)
             }
         }, 55000)
 
@@ -160,7 +176,9 @@ async function getDownloadLink(resource) {
                     resolved = true
                     clearTimeout(timeout)
                     response.data.destroy()
-                    reject(new Error('فشل التحميل على السيرفر'))
+                    const err = new Error('فشل التحميل على السيرفر')
+                    err.step = 'SSE'
+                    reject(err)
                 }
             }).on('end', () => {
                 if (resolved) return
@@ -172,19 +190,25 @@ async function getDownloadLink(resource) {
                     let link = match[1].replace(/\\\//g, '/').replace(/\\u002F/g, '/')
                     resolve(link)
                 } else {
-                    reject(new Error('لم يتم العثور على رابط التحميل'))
+                    const err = new Error('لم يتم العثور على رابط التحميل')
+                    err.step = 'SSE'
+                    reject(err)
                 }
             }).on('error', (e) => {
                 if (resolved) return
                 resolved = true
                 clearTimeout(timeout)
-                reject(new Error('خطأ اتصال: ' + e.message))
+                const err = new Error('خطأ اتصال SSE: ' + e.message)
+                err.step = 'SSE'
+                reject(err)
             })
         }).catch(e => {
             if (resolved) return
             resolved = true
             clearTimeout(timeout)
-            reject(new Error('فشل SSE: ' + e.message))
+            const err = new Error('فشل SSE: ' + e.message)
+            err.step = 'SSE'
+            reject(err)
         })
     })
 }
@@ -269,10 +293,12 @@ export default async function handler(req, res) {
 
         return res.status(200).json(result)
     } catch (e) {
-        console.error('[INSTAGRAM]', e.message)
+        console.error('[INSTAGRAM]', e.stack || e.message)
         return res.status(500).json({
             success: false,
-            error: e.message || 'Download failed'
+            error: e.message || 'Download failed',
+            step: e.step || 'unknown',
+            stack: (e.stack || '').split('\n').slice(0, 5)
         })
     }
-                        }
+                                     }
