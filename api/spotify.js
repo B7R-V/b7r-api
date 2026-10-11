@@ -1,4 +1,4 @@
-import { downloadTrack, getSpotifyInfo, getPlaylistTracks, extractSpotifyType } from '../lib/spotify.js'
+import { handleSpotify } from '../lib/spotify.js'
 
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*')
@@ -27,69 +27,8 @@ export default async function handler(req, res) {
     if (!/spotify\.com/i.test(url)) return res.status(400).json({ success: false, error: 'Not Spotify URL' })
 
     try {
-        const info = extractSpotifyType(url)
-        if (!info) return res.status(400).json({ success: false, error: 'Invalid Spotify URL' })
-
-        // ── Track ──
-        if (info.type === 'track') {
-            const meta = await getSpotifyInfo(url)
-            const parts = meta.title.split(' - ')
-            const title = parts[0]
-            const artist = parts[1] || ''
-
-            if (download) {
-                const file = await downloadTrack(title, artist)
-                return res.json({
-                    success: true,
-                    type: 'track',
-                    title,
-                    artist,
-                    thumbnail: meta.thumbnail,
-                    ...file
-                })
-            }
-            return res.json({
-                success: true,
-                type: 'track',
-                title,
-                artist,
-                thumbnail: meta.thumbnail
-            })
-        }
-
-        // ── Playlist / Album / Artist ──
-        const meta = await getSpotifyInfo(url)
-        const tracks = await getPlaylistTracks(url, info.type)
-
-        if (downloadAll) {
-            const results = []
-            for (let i = 0; i < tracks.length; i++) {
-                const t = tracks[i]
-                try {
-                    const f = await downloadTrack(t.title, t.artist)
-                    results.push({ index: i + 1, ...t, ...f, success: true })
-                } catch (e) {
-                    results.push({ index: i + 1, ...t, success: false, error: e.message })
-                }
-            }
-            return res.json({
-                success: true,
-                type: info.type,
-                title: meta.title,
-                thumbnail: meta.thumbnail,
-                total: results.length,
-                tracks: results
-            })
-        }
-
-        res.json({
-            success: true,
-            type: info.type,
-            title: meta.title,
-            thumbnail: meta.thumbnail,
-            total: tracks.length,
-            tracks
-        })
+        const result = await handleSpotify({ url, download, downloadAll, maxTracks })
+        res.json(result)
     } catch (e) {
         console.error('[Spotify]', e.message)
         res.status(500).json({ success: false, error: e.message })
